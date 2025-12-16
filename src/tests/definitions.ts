@@ -1090,4 +1090,18 @@ const tests = [
   },
 ];
 
+// Group tests by HTTP method for easier navigation/debugging
+export const testsByMethod = tests.reduce<Record<string, any[]>>((acc, test) => {
+  const method = (test.method || 'GET').toUpperCase();
+  if (!acc[method]) acc[method] = [];
+  acc[method].push(test);
+  return acc;
+}, {});
+
+export const getTests = testsByMethod.GET || [];
+export const postTests = testsByMethod.POST || [];
+export const putTests = testsByMethod.PUT || [];
+export const patchTests = testsByMethod.PATCH || [];
+export const deleteTests = testsByMethod.DELETE || [];
+
 export default tests;
