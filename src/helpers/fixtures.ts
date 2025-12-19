@@ -1,20 +1,22 @@
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
+import { getByPath } from './assertions.js';
 
 dotenv.config();
 
 const defaultPath = path.resolve(process.cwd(), 'fixtures', 'ids.json');
+type FixtureMap = Record<string, any>;
 
-let cachedFixtures: Record<string, any> | null = null;
+let cachedFixtures: FixtureMap | null = null;
 
-function loadFromFile(filePath = defaultPath) {
+function loadFromFile(filePath = defaultPath): FixtureMap {
   try {
     if (cachedFixtures) return cachedFixtures;
     if (!fs.existsSync(filePath)) return {};
     const raw = fs.readFileSync(filePath, 'utf8');
     const parsed = JSON.parse(raw);
-    cachedFixtures = parsed || {};
+    cachedFixtures = (parsed || {}) as FixtureMap;
     return cachedFixtures;
   } catch (err: any) {
     console.warn(`Failed to load fixtures from ${filePath}: ${err.message}`);
@@ -22,7 +24,7 @@ function loadFromFile(filePath = defaultPath) {
   }
 }
 
-export function getFixtures() {
+export function getFixtures(): FixtureMap {
   return loadFromFile(process.env.FIXTURES_PATH || defaultPath);
 }
 
@@ -69,15 +71,16 @@ const pathToFixture = [
   { prefix: '/api/staff/', key: 'staff_id' },
 ];
 
-function swapPathId(url: string, fixtures: Record<string, any>) {
+function swapPathId(url: string, fixtures: FixtureMap) {
   let result = url;
   pathToFixture.forEach(({ prefix, key }) => {
     if (result.startsWith(prefix) && fixtures[key]) {
       const after = result.slice(prefix.length);
-      const segment = after.split(/[/?]/)[0];
+      const segment = after.split(/[/?]/)[0] || '';
       // Only swap when the existing segment looks like a UUID to avoid replacing words like "upload"
       if (uuidRegex.test(segment)) {
-        const replaced = after.replace(/^[^/?]+/, fixtures[key]);
+        const replacement = String(fixtures[key]);
+        const replaced = after.replace(/^[^/?]+/, replacement);
         result = prefix + replaced;
       }
     }
@@ -85,9 +88,12 @@ function swapPathId(url: string, fixtures: Record<string, any>) {
   return result;
 }
 
-export function normalizeWithFixtures({ url, data, params }: { url: string; data?: any; params?: any }) {
+export function normalizeWithFixtures(
+  { url, data, params }: { url: string; data?: any; params?: any },
+  opts: { skipPathRewrite?: boolean } = {}
+) {
   const fixtures = getFixtures();
-  const finalUrl = swapPathId(url, fixtures);
+  const finalUrl = opts.skipPathRewrite ? url : swapPathId(url, fixtures);
 
   const rewriteByKey = (val: any, keyName: string) => {
     const lower = keyName.toLowerCase();
@@ -126,4 +132,46 @@ export function normalizeWithFixtures({ url, data, params }: { url: string; data
     data: walk(data),
     params: walk(params),
   };
+}
+
+export function captureFixturesFrom(body: any, capture?: Record<string, string>) {
+  if (!capture || typeof capture !== 'object') return;
+  const fixtures = getFixtures();
+
+  Object.entries(capture).forEach(([key, pathKey]) => {
+    const value = getByPath(body, pathKey);
+    if (value === undefined || value === null) return;
+    if (fixtures[key] === value) return;
+    setFixture(key, value);
+  });
+}
+
+export function captureAllIds(body: any) {
+  const fixtures = getFixtures();
+
+  const walk = (val: any, pathParts: string[]) => {
+    if (Array.isArray(val)) {
+      val.forEach((item, idx) => walk(item, [...pathParts, String(idx)]));
+      return;
+    }
+    if (val && typeof val === 'object') {
+      Object.entries(val).forEach(([k, v]) => walk(v, [...pathParts, k]));
+      return;
+    }
+    const lastKey = pathParts[pathParts.length - 1] || '';
+    if (typeof val !== 'string') return;
+    if (!/id/i.test(lastKey)) return;
+    if (!uuidRegex.test(val)) return;
+
+    const fixtureKey = pathParts
+      .map((p) => p.replace(/[^a-zA-Z0-9]/g, '_'))
+      .join('_')
+      .toLowerCase();
+
+    if (!fixtureKey) return;
+    if (fixtures[fixtureKey] === val) return;
+    setFixture(fixtureKey, val);
+  };
+
+  walk(body, []);
 }

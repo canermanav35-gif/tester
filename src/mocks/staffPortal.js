@@ -905,7 +905,7 @@ export const staffPortalMocks = {
       status: 200,
       data: [
         {
-          id: 'e22cab31-9885-4dde-8699-7eba55775f42',
+          id: 'f9d03e30-bc1a-4744-b565-ba1089a7d0be',
           staffID: '62ec1842-aee6-4bdb-92f7-96eedaf1f33b',
           staff: {
             id: '62ec1842-aee6-4bdb-92f7-96eedaf1f33b',
@@ -1179,9 +1179,9 @@ export const staffPortalMocks = {
       status: 200,
       data: [
         {
-          id: '123e4567-e89b-12d3-a456-426614174000',
+          id: 'ee2d69ab-6b88-4500-9013-901a7fd7db2d',
           description: 'Laptop assigned for remote work project',
-          groupID: '1bff7d2f-6c6b-4b0c-8458-179f0f1dc9e2',
+          groupID: '5b129778-38aa-4847-96c6-c1f25c6e16b9',
           status: 1,
           return_date: '2024-12-31T23:59:59.000Z',
           response_note: 'Asset not suitable for my work requirements',
@@ -1265,14 +1265,14 @@ export const staffPortalMocks = {
       status: 200,
       data: [
         {
-          groupID: 'string',
+          groupID: '5b129778-38aa-4847-96c6-c1f25c6e16b9',
           count: 0,
           status: 0,
           data: [
             {
-              id: '123e4567-e89b-12d3-a456-426614174000',
+              id: 'ee2d69ab-6b88-4500-9013-901a7fd7db2d',
               description: 'Laptop assigned for remote work project',
-              groupID: '1bff7d2f-6c6b-4b0c-8458-179f0f1dc9e2',
+              groupID: '5b129778-38aa-4847-96c6-c1f25c6e16b9',
               status: 1,
               return_date: '2024-12-31T23:59:59.000Z',
               response_note: 'Asset not suitable for my work requirements',

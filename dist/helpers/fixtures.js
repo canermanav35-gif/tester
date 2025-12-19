@@ -1,0 +1,164 @@
+import fs from 'fs';
+import path from 'path';
+import dotenv from 'dotenv';
+import { getByPath } from './assertions.js';
+dotenv.config();
+const defaultPath = path.resolve(process.cwd(), 'fixtures', 'ids.json');
+let cachedFixtures = null;
+function loadFromFile(filePath = defaultPath) {
+    try {
+        if (cachedFixtures)
+            return cachedFixtures;
+        if (!fs.existsSync(filePath))
+            return {};
+        const raw = fs.readFileSync(filePath, 'utf8');
+        const parsed = JSON.parse(raw);
+        cachedFixtures = (parsed || {});
+        return cachedFixtures;
+    }
+    catch (err) {
+        console.warn(`Failed to load fixtures from ${filePath}: ${err.message}`);
+        return {};
+    }
+}
+export function getFixtures() {
+    return loadFromFile(process.env.FIXTURES_PATH || defaultPath);
+}
+export function setFixture(key, value) {
+    const filePath = process.env.FIXTURES_PATH || defaultPath;
+    const fixtures = loadFromFile(filePath);
+    fixtures[key] = value;
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(fixtures, null, 2), 'utf8');
+    cachedFixtures = fixtures;
+}
+export function replacePlaceholders(value) {
+    const fixtures = getFixtures();
+    const replacer = (val) => {
+        if (typeof val !== 'string')
+            return val;
+        return val.replace(/\{\{([^}]+)\}\}/g, (_, key) => {
+            const trimmed = key.trim();
+            return fixtures[trimmed] !== undefined ? fixtures[trimmed] : '';
+        });
+    };
+    const walk = (val) => {
+        if (Array.isArray(val))
+            return val.map(walk);
+        if (val && typeof val === 'object') {
+            return Object.fromEntries(Object.entries(val).map(([k, v]) => [k, walk(v)]));
+        }
+        return replacer(val);
+    };
+    return walk(value);
+}
+// Heuristic UUID matcher
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const pathToFixture = [
+    { prefix: '/api/departments/', key: 'department_id' },
+    { prefix: '/api/staff-portal/projects/', key: 'project_id' },
+    { prefix: '/api/staff-portal/assignments/', key: 'assignment_id' },
+    { prefix: '/api/staff-portal/entrust/', key: 'entrust_id' },
+    { prefix: '/api/staff-portal/payrolls/', key: 'payroll_id' },
+    { prefix: '/api/files/', key: 'file_id' },
+    { prefix: '/api/staff/', key: 'staff_id' },
+];
+function swapPathId(url, fixtures) {
+    let result = url;
+    pathToFixture.forEach(({ prefix, key }) => {
+        if (result.startsWith(prefix) && fixtures[key]) {
+            const after = result.slice(prefix.length);
+            const segment = after.split(/[/?]/)[0] || '';
+            // Only swap when the existing segment looks like a UUID to avoid replacing words like "upload"
+            if (uuidRegex.test(segment)) {
+                const replacement = String(fixtures[key]);
+                const replaced = after.replace(/^[^/?]+/, replacement);
+                result = prefix + replaced;
+            }
+        }
+    });
+    return result;
+}
+export function normalizeWithFixtures({ url, data, params }, opts = {}) {
+    const fixtures = getFixtures();
+    const finalUrl = opts.skipPathRewrite ? url : swapPathId(url, fixtures);
+    const rewriteByKey = (val, keyName) => {
+        const lower = keyName.toLowerCase();
+        const mapping = [
+            { needle: 'staffid', key: 'staff_id' },
+            { needle: 'substituteid', key: 'substitute_id' },
+            { needle: 'departmentid', key: 'department_id' },
+            { needle: 'assignmentid', key: 'assignment_id' },
+            { needle: 'entrustid', key: 'entrust_id' },
+            { needle: 'projectid', key: 'project_id' },
+            { needle: 'fileid', key: 'file_id' },
+            { needle: 'payrollid', key: 'payroll_id' },
+            { needle: 'groupid', key: 'group_id' },
+            { needle: 'expensegroupid', key: 'expense_group_id' },
+        ];
+        const hit = mapping.find((m) => lower.includes(m.needle) && fixtures[m.key]);
+        if (hit)
+            return fixtures[hit.key];
+        return val;
+    };
+    const walk = (val, keyName = '') => {
+        if (Array.isArray(val))
+            return val.map((v) => walk(v, keyName));
+        if (val && typeof val === 'object') {
+            return Object.fromEntries(Object.entries(val).map(([k, v]) => [k, walk(rewriteByKey(v, k), k)]));
+        }
+        if (typeof val === 'string' && uuidRegex.test(val)) {
+            return rewriteByKey(val, keyName);
+        }
+        return rewriteByKey(val, keyName);
+    };
+    return {
+        url: finalUrl,
+        data: walk(data),
+        params: walk(params),
+    };
+}
+export function captureFixturesFrom(body, capture) {
+    if (!capture || typeof capture !== 'object')
+        return;
+    const fixtures = getFixtures();
+    Object.entries(capture).forEach(([key, pathKey]) => {
+        const value = getByPath(body, pathKey);
+        if (value === undefined || value === null)
+            return;
+        if (fixtures[key] === value)
+            return;
+        setFixture(key, value);
+    });
+}
+export function captureAllIds(body) {
+    const fixtures = getFixtures();
+    const walk = (val, pathParts) => {
+        if (Array.isArray(val)) {
+            val.forEach((item, idx) => walk(item, [...pathParts, String(idx)]));
+            return;
+        }
+        if (val && typeof val === 'object') {
+            Object.entries(val).forEach(([k, v]) => walk(v, [...pathParts, k]));
+            return;
+        }
+        const lastKey = pathParts[pathParts.length - 1] || '';
+        if (typeof val !== 'string')
+            return;
+        if (!/id/i.test(lastKey))
+            return;
+        if (!uuidRegex.test(val))
+            return;
+        const fixtureKey = pathParts
+            .map((p) => p.replace(/[^a-zA-Z0-9]/g, '_'))
+            .join('_')
+            .toLowerCase();
+        if (!fixtureKey)
+            return;
+        if (fixtures[fixtureKey] === val)
+            return;
+        setFixture(fixtureKey, val);
+    };
+    walk(body, []);
+}
+//# sourceMappingURL=fixtures.js.map

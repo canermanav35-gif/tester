@@ -1,5 +1,5 @@
-import { send } from './httpClient.ts';
-import { getFixtures, setFixture } from './fixtures.ts';
+import { send } from './httpClient.js';
+import { getFixtures, setFixture } from './fixtures.js';
 
 async function ensure(key: string, fetcher: () => Promise<string | undefined>) {
   const fixtures = getFixtures();

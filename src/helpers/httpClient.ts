@@ -1,8 +1,8 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
-import { getToken } from './auth.ts';
+import { getToken } from './auth.js';
 import { getMockResponse } from '../mocks/responses.js';
-import { replacePlaceholders, normalizeWithFixtures } from './fixtures.ts';
+import { replacePlaceholders, normalizeWithFixtures } from './fixtures.js';
 
 dotenv.config();
 
@@ -42,11 +42,14 @@ export async function send({
   const rawParams = replacePlaceholders(params);
   const finalHeaders = replacePlaceholders(extraHeaders);
 
-  const normalized = normalizeWithFixtures({
-    url: rawUrl,
-    data: rawData,
-    params: rawParams,
-  });
+  const normalized = normalizeWithFixtures(
+    {
+      url: rawUrl,
+      data: rawData,
+      params: rawParams,
+    },
+    { skipPathRewrite: useMock }
+  );
   const finalUrl = normalized.url;
   const finalData = normalized.data;
   const finalParams = normalized.params;

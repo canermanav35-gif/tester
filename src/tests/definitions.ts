@@ -1,6 +1,29 @@
-import { prepareLeaveRequest } from '../helpers/prep.ts';
+import {
+  prepareLeaveRequest,
+  prepareAdminLeaveCreate,
+  prepareLeaveUpdate,
+  prepareLeaveDelete,
+  prepareLocationCreate,
+  prepareLocationDetail,
+  prepareLocationUpdate,
+  prepareLocationDelete,
+  prepareLocationRooms,
+} from '../helpers/prep.js';
 
-const tests = [
+export type TestDefinition = {
+  name: string;
+  user?: string;
+  method?: string;
+  url: string;
+  data?: any;
+  params?: any;
+  headers?: Record<string, any>;
+  assertions?: any[];
+  prepare?: (test: TestDefinition) => Promise<TestDefinition> | TestDefinition;
+  captures?: Record<string, string>;
+};
+
+const tests: TestDefinition[] = [
   {
     name: 'Leaves list field validation',
     user: 'admin',
@@ -13,6 +36,97 @@ const tests = [
       { path: 'data.0.staff.id', type: 'notNull', message: 'staff.id must not be null' },
       { path: 'data.0.status', type: 'in', expected: [0, 1, 2], message: 'status must be in [0,1,2]' },
       { path: 'count', type: 'notNull', message: 'count must be present' },
+    ],
+  },
+  {
+    name: 'Leave detail validation',
+    user: 'admin',
+    method: 'GET',
+    url: '/api/leaves/05183e90-d06b-4f85-9068-a847a6059167',
+    assertions: [
+      { path: 'success', type: 'equals', expected: true, message: 'success must be true' },
+      { path: 'status', type: 'equals', expected: 200, message: 'status must be 200' },
+      { path: 'data.id', type: 'uuid', message: 'leave id must be valid UUID' },
+      { path: 'data.staff.id', type: 'uuid', message: 'staff id must be valid UUID' },
+      { path: 'data.department.id', type: 'uuid', message: 'department id must be valid UUID' },
+      { path: 'data.type', type: 'equals', expected: 'ANNUAL_LEAVE', message: 'type must be ANNUAL_LEAVE' },
+      { path: 'data.number_of_days', type: 'equals', expected: 26, message: 'number_of_days must be 26' },
+      { path: 'data.status', type: 'in', expected: [0, 1, 2], message: 'status must be in [0,1,2]' },
+      { path: 'data.leave_document.id', type: 'uuid', message: 'leave_document id must be valid UUID' },
+      { path: 'data.substitute.id', type: 'uuid', message: 'substitute id must be valid UUID' },
+    ],
+  },
+  {
+    name: 'Create leave (auto-filled)',
+    user: 'admin',
+    method: 'POST',
+    url: '/api/leaves',
+    headers: {
+      accept: 'application/json',
+      'Content-Type': 'multipart/form-data',
+    },
+    prepare: prepareAdminLeaveCreate,
+    data: {
+      staffID: '{{staff_id}}',
+      substituteID: '{{substitute_id}}',
+      type: 'ANNUAL_LEAVE',
+      start_date: '{{start_date}}',
+      end_date: '{{end_date}}',
+      note: 'Automated leave request',
+      document: '@fixtures/dummy.png',
+    },
+    assertions: [
+      { path: 'success', type: 'equals', expected: true, message: 'success must be true' },
+      { path: 'status', type: 'equals', expected: 201, message: 'status must be 201' },
+      { path: 'data.id', type: 'uuid', message: 'leave id must be valid UUID' },
+      { path: 'data.type', type: 'equals', expected: 'ANNUAL_LEAVE', message: 'type must be ANNUAL_LEAVE' },
+      { path: 'data.status', type: 'in', expected: [0, 1, 2], message: 'status must be in [0,1,2]' },
+    ],
+  },
+  {
+    name: 'Update leave (auto-filled)',
+    user: 'admin',
+    method: 'PATCH',
+    url: '/api/leaves/05183e90-d06b-4f85-9068-a847a6059167',
+    headers: {
+      accept: 'application/json',
+      'Content-Type': 'multipart/form-data',
+    },
+    prepare: prepareLeaveUpdate,
+    data: {
+      staffID: '',
+      substituteID: '',
+      type: 'PATERNITY_LEAVE',
+      start_date: '',
+      end_date: '',
+      document: '',
+      note: 'string',
+    },
+    assertions: [
+      { path: 'success', type: 'equals', expected: true, message: 'success must be true' },
+      { path: 'status', type: 'equals', expected: 200, message: 'status must be 200' },
+      { path: 'data.id', type: 'uuid', message: 'leave id must be valid UUID' },
+      { path: 'data.staff.id', type: 'uuid', message: 'staff id must be valid UUID' },
+      { path: 'data.department.id', type: 'uuid', message: 'department id must be valid UUID' },
+      { path: 'data.type', type: 'equals', expected: 'ANNUAL_LEAVE', message: 'type must be ANNUAL_LEAVE' },
+      { path: 'data.number_of_days', type: 'equals', expected: 2.5, message: 'number_of_days must be 2.5' },
+      { path: 'data.status', type: 'in', expected: [0, 1, 2], message: 'status must be in [0,1,2]' },
+      { path: 'data.leave_document.id', type: 'uuid', message: 'leave_document id must be valid UUID' },
+      { path: 'data.approval_document.id', type: 'uuid', message: 'approval_document id must be valid UUID' },
+      { path: 'data.substitute.id', type: 'uuid', message: 'substitute id must be valid UUID' },
+    ],
+  },
+  {
+    name: 'Delete leave (auto-filled)',
+    user: 'admin',
+    method: 'DELETE',
+    url: '/api/leaves/{{leave_id}}',
+    headers: { accept: 'application/json' },
+    prepare: prepareLeaveDelete,
+    assertions: [
+      { path: 'success', type: 'equals', expected: true, message: 'success must be true' },
+      { path: 'status', type: 'equals', expected: 200, message: 'status must be 200' },
+      { path: 'message', type: 'equals', expected: 'İzin kaydı başarıyla silindi', message: 'message must match' },
     ],
   },
   {
@@ -48,10 +162,139 @@ const tests = [
     ],
   },
   {
+    name: 'Create location (auto name)',
+    user: 'admin',
+    method: 'POST',
+    url: '/api/locations',
+    headers: {
+      accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    prepare: prepareLocationCreate,
+    data: {
+      name: '',
+      comments: 'Merkez binadaki ana ofis',
+      address: {
+        country: 'Türkiye',
+        city: 'İstanbul',
+        district: 'Kadıköy',
+        latitude: 40.9876,
+        longitude: 29.0234,
+      },
+      rooms: [
+        { name: 'Conference Room A' },
+        { name: 'Meeting Room B' },
+        { name: 'Office 301' },
+      ],
+      status: 1,
+    },
+    assertions: [
+      { path: 'success', type: 'equals', expected: true, message: 'success must be true' },
+      { path: 'status', type: 'equals', expected: 201, message: 'status must be 201' },
+      { path: 'data.id', type: 'uuid', message: 'location id must be valid UUID' },
+      { path: 'data.name', type: 'notNull', message: 'name must not be null' },
+      { path: 'data.rooms.0.name', type: 'notNull', message: 'first room name must not be null' },
+      { path: 'data.status', type: 'in', expected: [0, 1, 2], message: 'status must be in [0,1,2]' },
+    ],
+  },
+  {
+    name: 'Locations list validation',
+    user: 'admin',
+    method: 'GET',
+    url: '/api/locations',
+    captures: { location_id: 'data.0.id' },
+    assertions: [
+      { path: 'success', type: 'equals', expected: true, message: 'success must be true' },
+      { path: 'status', type: 'equals', expected: 200, message: 'status must be 200' },
+      { path: 'data.0.id', type: 'uuid', message: 'first location id must be valid UUID' },
+      { path: 'data.0.name', type: 'notNull', message: 'first location name must not be null' },
+      { path: 'count', type: 'equals', expected: 3, message: 'count must be 3' },
+    ],
+  },
+  {
+    name: 'Location detail validation',
+    user: 'admin',
+    method: 'GET',
+    url: '/api/locations/{{location_id}}?withRooms=false',
+    prepare: prepareLocationDetail,
+    assertions: [
+      { path: 'success', type: 'equals', expected: true, message: 'success must be true' },
+      { path: 'status', type: 'equals', expected: 200, message: 'status must be 200' },
+      { path: 'data.id', type: 'uuid', message: 'location id must be valid UUID' },
+      { path: 'data.name', type: 'notNull', message: 'name must not be null' },
+      { path: 'data.qrCodeUrl', type: 'notNull', message: 'qrCodeUrl must not be null' },
+      { path: 'data.roomsCount', type: 'equals', expected: 3, message: 'roomsCount must be 3' },
+      { path: 'data.status', type: 'in', expected: [0, 1, 2], message: 'status must be in [0,1,2]' },
+    ],
+  },
+  {
+    name: 'Location update (auto name)',
+    user: 'admin',
+    method: 'PATCH',
+    url: '/api/locations/{{location_id}}',
+    headers: {
+      accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    prepare: prepareLocationUpdate,
+    data: {
+      name: '',
+      comments: 'Merkez binadaki ana ofis',
+      address: {
+        country: 'Türkiye',
+        city: 'İstanbul',
+        district: 'Kadıköy',
+        latitude: 40.9876,
+        longitude: 29.0234,
+      },
+      status: 1,
+      rooms: [], // will be stripped in prepare
+    },
+    assertions: [
+      { path: 'success', type: 'equals', expected: true, message: 'success must be true' },
+      { path: 'status', type: 'equals', expected: 200, message: 'status must be 200' },
+      { path: 'data.id', type: 'uuid', message: 'location id must be valid UUID' },
+      { path: 'data.name', type: 'notNull', message: 'name must not be null' },
+      { path: 'data.address.city', type: 'equals', expected: 'İstanbul', message: 'city must be İstanbul' },
+      { path: 'data.status', type: 'in', expected: [0, 1, 2], message: 'status must be in [0,1,2]' },
+      { path: 'data.rooms.0.id', type: 'uuid', message: 'room id must be valid UUID' },
+    ],
+  },
+  {
+    name: 'Location delete (auto id)',
+    user: 'admin',
+    method: 'DELETE',
+    url: '/api/locations/{{location_id}}',
+    headers: { accept: 'application/json' },
+    prepare: prepareLocationDelete,
+    assertions: [
+      { path: 'success', type: 'equals', expected: true, message: 'success must be true' },
+      { path: 'status', type: 'equals', expected: 200, message: 'status must be 200' },
+      { path: 'data.message', type: 'equals', expected: 'operation.success', message: 'message must match' },
+    ],
+  },
+  {
+    name: 'Location rooms list (auto id)',
+    user: 'admin',
+    method: 'GET',
+    url: '/api/locations/{{location_id}}/rooms',
+    headers: { accept: 'application/json' },
+    prepare: prepareLocationRooms,
+    assertions: [
+      { path: 'success', type: 'equals', expected: true, message: 'success must be true' },
+      { path: 'status', type: 'equals', expected: 200, message: 'status must be 200' },
+      { path: 'data.0.id', type: 'uuid', message: 'first room id must be valid UUID' },
+      { path: 'data.0.locationID', type: 'uuid', message: 'locationID must be valid UUID' },
+      { path: 'data.0.name', type: 'notNull', message: 'room name must not be null' },
+      { path: 'count', type: 'equals', expected: 3, message: 'count must be 3' },
+    ],
+  },
+  {
     name: 'Departments list validation',
     user: 'admin',
     method: 'GET',
     url: '/api/departments',
+    captures: { department_id: 'data.0.id' },
     assertions: [
       { path: 'success', type: 'equals', expected: true, message: 'success must be true' },
       { path: 'status', type: 'equals', expected: 200, message: 'status must be 200' },
@@ -392,6 +635,7 @@ const tests = [
     method: 'GET',
     url: '/api/staff-portal/assignments',
     headers: { accept: 'application/json' },
+    captures: { assignment_id: 'data.0.id' },
     assertions: [
       { path: 'success', type: 'equals', expected: true, message: 'success must be true' },
       { path: 'status', type: 'equals', expected: 200, message: 'status must be 200' },
@@ -458,6 +702,7 @@ const tests = [
     method: 'GET',
     url: '/api/staff-portal/projects',
     headers: { accept: 'application/json' },
+    captures: { project_id: 'data.0.id' },
     assertions: [
       { path: 'success', type: 'equals', expected: true, message: 'success must be true' },
       { path: 'status', type: 'equals', expected: 200, message: 'status must be 200' },
@@ -501,6 +746,7 @@ const tests = [
     method: 'GET',
     url: '/api/staff-portal/entrust',
     headers: { accept: 'application/json' },
+    captures: { entrust_id: 'data.0.id' },
     assertions: [
       { path: 'success', type: 'equals', expected: true, message: 'success must be true' },
       { path: 'status', type: 'equals', expected: 200, message: 'status must be 200' },
@@ -516,6 +762,7 @@ const tests = [
     method: 'GET',
     url: '/api/staff-portal/entrust/grouped',
     headers: { accept: 'application/json' },
+    captures: { group_id: 'data.0.groupID' },
     assertions: [
       { path: 'status', type: 'equals', expected: 200, message: 'status must be 200' },
       { path: 'data.0.groupID', type: 'notNull', message: 'groupID must not be null' },
@@ -548,7 +795,7 @@ const tests = [
       'Content-Type': 'application/json',
     },
     data: {
-      groupID: '5b129778-38aa-4847-96c6-c1f25c6e16b9',
+      groupID: '{{group_id}}',
     },
     assertions: [
       { path: 'success', type: 'equals', expected: true, message: 'success must be true' },
@@ -590,6 +837,7 @@ const tests = [
     method: 'GET',
     url: '/api/staff-portal/expenses',
     headers: { accept: 'application/json' },
+    captures: { expense_group_id: 'data.0.id' },
     assertions: [
       { path: 'success', type: 'equals', expected: true, message: 'success must be true' },
       { path: 'status', type: 'equals', expected: 200, message: 'status must be 200' },
@@ -800,6 +1048,7 @@ const tests = [
     method: 'GET',
     url: '/api/staff-portal/payrolls',
     headers: { accept: 'application/json' },
+    captures: { payroll_id: 'data.0.id' },
     assertions: [
       { path: 'success', type: 'equals', expected: true, message: 'success must be true' },
       { path: 'status', type: 'equals', expected: 200, message: 'status must be 200' },
@@ -871,6 +1120,7 @@ const tests = [
     method: 'GET',
     url: '/api/files',
     headers: { accept: 'application/json' },
+    captures: { file_id: 'data.0.id' },
     assertions: [
       { path: 'success', type: 'equals', expected: true, message: 'success must be true' },
       { path: 'status', type: 'equals', expected: 200, message: 'status must be 200' },
@@ -1011,6 +1261,7 @@ const tests = [
     method: 'GET',
     url: '/api/staff',
     headers: { accept: 'application/json' },
+    captures: { staff_id: 'data.0.id', substitute_id: 'data.1.id' },
     assertions: [
       { path: 'success', type: 'equals', expected: true, message: 'success must be true' },
       { path: 'status', type: 'equals', expected: 200, message: 'status must be 200' },
